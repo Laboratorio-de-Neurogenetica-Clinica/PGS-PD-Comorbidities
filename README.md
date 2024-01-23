@@ -19,23 +19,24 @@ Pipeline with methodology to replicate manuscript "Heterogeneous contribution of
 8. [Python](https://www.python.org/)
 ## Step 1. Quality controls for GWAS summary statistics
 
-# Downlaoad GWAS EPI 
+### Downlaoad GWAS EPI 
 ```
 wget -c https://www.epigad.org/download/final_sumstats.zip
 unzip final_sumstats.zip
 
-#adjust GWAS SS
-############################ QC SS Comorbidities
-##### formato requerido SS .tsv
-#header CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value
-# 1 CHR
-# 2 BP
-# 3 MarkerName (If not present, fill with NA)
-# 4 Allele1 (aLELO DE EFECTO gwas)
-# 5 Allele2 (ALELO DE NO EFECTO)
-# 6 Freq1 (If not present, fill with NA)
-# 7 Beta
-# 8 P-value
+###adjust GWAS SS
+GWAS SS file need to be formated in this way
+1. Space delimieted file
+2. Header: CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value
+    1 CHR
+    2 BP
+    3 MarkerName (If not present, fill with NA)
+    4 Allele1 (aLELO DE EFECTO gwas)
+    5 Allele2 (ALELO DE NO EFECTO)
+    6 Freq1 (If not present, fill with NA)
+    7 Beta
+    8 P-value
+```
 {
 echo "CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value"
 cat ILAE3_TRANS_all_epilepsy_final.tbl | sed '1d' | cut -f1,2,3,4,5,6,12,10  
