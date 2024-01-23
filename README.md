@@ -11,20 +11,25 @@ Pipeline with methodology to replicate manuscript "Heterogeneous contribution of
 ## Dependencies
 1. [PLINK 1.9](https://www.cog-genomics.org/plink/1.9/)
 2. [PLINK 2](https://www.cog-genomics.org/plink/2.0/)
-3. [EIGENSTRAT](https://github.com/DReichLab/EIG)
-4. [PennCNV](http://penncnv.openbioinformatics.org/en/latest/)
-5. [VEP](https://www.ensembl.org/info/docs/tools/vep/index.html)
-6. [Bedtools](https://bedtools.readthedocs.io/en/latest/)
-7. [R](https://www.r-project.org/)
-8. [Python](https://www.python.org/)
+3. [Liftover](https://genome.sph.umich.edu/wiki/LiftOver)
+4. 
+5. [PennCNV](http://penncnv.openbioinformatics.org/en/latest/)
+6. [VEP](https://www.ensembl.org/info/docs/tools/vep/index.html)
+7. [Bedtools](https://bedtools.readthedocs.io/en/latest/)
+8. [R](https://www.r-project.org/)
+9. [Python](https://www.python.org/)
+
+## Directory structure
+  |
+  |--
 ## Step 1. Quality controls for GWAS summary statistics
 
-### Downlaoad GWAS EPI 
+### 1. Downlaoad GWAS EPI 
 ```
 wget -c https://www.epigad.org/download/final_sumstats.zip
 unzip final_sumstats.zip
 ```
-### Adjust GWAS SS
+### 2 .Adjust GWAS SS
 GWAS SS file need to be formated in this way
 A Space delimieted file with a header like this "CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value"
 1. CHR
@@ -41,3 +46,5 @@ echo "CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value"
 cat ILAE3_TRANS_all_epilepsy_final.tbl | sed '1d' | cut -f1,2,3,4,5,6,12,10  
 } | sed 's/\t/ /g' > GWAS_SS_EPI_all_2022_RAW_hg19.tsv
 ```
+### 3. Liftover GWAS SS to GRCh38
+
