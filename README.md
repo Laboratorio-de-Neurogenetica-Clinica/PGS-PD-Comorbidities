@@ -24,18 +24,18 @@ Pipeline with methodology to replicate manuscript "Heterogeneous contribution of
 wget -c https://www.epigad.org/download/final_sumstats.zip
 unzip final_sumstats.zip
 ```
-###adjust GWAS SS
+### Adjust GWAS SS
 GWAS SS file need to be formated in this way
 1. Space delimieted file
 2. Header: CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value
-    1 CHR
-    2 BP
-    3 MarkerName (If not present, fill with NA)
-    4 Allele1 (aLELO DE EFECTO gwas)
-    5 Allele2 (ALELO DE NO EFECTO)
-    6 Freq1 (If not present, fill with NA)
-    7 Beta
-    8 P-value
+   a. CHR
+   b. BP
+   c. MarkerName (If not present, fill with NA)
+   d. Allele1 (Effect allele gwas)
+   e. Allele2 (Non-effect allele)
+   f. Freq1 (If not present, fill with NA)
+   g. Beta
+   h. P-value
 ```
 {
 echo "CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value"
