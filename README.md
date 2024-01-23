@@ -23,7 +23,7 @@ Pipeline with methodology to replicate manuscript "Heterogeneous contribution of
 ```
 wget -c https://www.epigad.org/download/final_sumstats.zip
 unzip final_sumstats.zip
-
+```
 ###adjust GWAS SS
 GWAS SS file need to be formated in this way
 1. Space delimieted file
