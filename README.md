@@ -20,7 +20,7 @@ Pipeline with methodology to replicate manuscript "Heterogeneous contribution of
 ## Step 1. Quality controls for GWAS summary statistics
 
 # Downlaoad GWAS EPI 
-´´´
+```
 wget -c https://www.epigad.org/download/final_sumstats.zip
 unzip final_sumstats.zip
 
@@ -40,4 +40,4 @@ unzip final_sumstats.zip
 echo "CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value"
 cat ILAE3_TRANS_all_epilepsy_final.tbl | sed '1d' | cut -f1,2,3,4,5,6,12,10  
 } | sed 's/\t/ /g' > GWAS_SS_EPI_all_2022_RAW_hg19.tsv
-´´´
+```
