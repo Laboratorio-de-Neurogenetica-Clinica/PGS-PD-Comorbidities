@@ -21,14 +21,14 @@ Pipeline with methodology to replicate manuscript "Heterogeneous contribution of
 
 ## Directory structure
 PGS-PD-Comorbidities
-├── PRS_EPI_all_2022
-│   ├── 1_SS_GWAS_EPI_all_2022
-|   |   ├──     
-│   ├── FILTERED.test.bim
-│   ├── FILTERED.test.fam
-│   └── FILTERED.test.log
-├── 1_GWAS_liftover.sh
-└── 2_GWAS_QC.sh
+├── PRS_EPI_all_2022\n
+│   ├── 1_SS_GWAS_EPI_all_2022\n
+|   |   ├──     \n
+│   ├── FILTERED.test.bim\n
+│   ├── FILTERED.test.fam\n
+│   └── FILTERED.test.log\n
+├── 1_GWAS_liftover.sh\n
+└── 2_GWAS_QC.sh\n
 
 ## Step 1. Quality controls for GWAS summary statistics
 
