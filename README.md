@@ -411,4 +411,8 @@ The following code needs to be done in RAP, it takes the files generated above t
 ```
 plink --bfile clumped_SS_chr.all --score clumped_final_SS_common_SNPS_all.txt 1 5 8 header --q-score-range range_list SNP.pvalue --out SS_PLINK1.9_PRS --memory 60000
 ```
+## Step 4: PRS threshholding
+
+### 1. Sample QC
+The quality controls of the individuals were performed by extracting the available information from the cohort browser of dnanexus, for this example we will make use of synthesized clinical data to perform the tresholding and sample QC steps.
 
