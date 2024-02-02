@@ -528,6 +528,8 @@ METADATA=PRS_EPI_all_2022/Metadata/
 The following R scripts allow you to produce the results of the manuscript. I make available the final result obtained by changing the IDS coding.
 ```
 cd Figures
+gunzip *_PRS_pheno_covar.tsv.gz
+
 ./Figure_2.R
 ./Figure_3.R
 ./Figure_4.R
