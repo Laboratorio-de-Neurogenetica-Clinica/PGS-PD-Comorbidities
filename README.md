@@ -525,10 +525,22 @@ METADATA=PRS_EPI_all_2022/Metadata/
 ./6_CMRB_Best_PRS.R ${PATH_TO_THRESH}/used_tresh.txt ${PATH_TO_THRESH}/final.Phenotipo_QC.fam ${METADATA}/COVARS.tsv 0.01
 ```
 ## Step 5. Replicate Figures
-
-### 4. Save PRS at Pvalue Threshold obtained (Indicate the pvalue obtained in the last step, in this case 0.01)
+The following R scripts allow you to produce the results of the manuscript. I make available the final result obtained by changing the IDS coding.
 ```
-
+cd Figures
+./Figure_2.R
+./Figure_3.R
+./Figure_4.R
+./Figure_5.R
+./Figure_Sup_1.R
+./Figure_Sup_2.R
+./Figure_Sup_3.R
+./Figure_Sup_4.R
+./Figure_Sup_5.R
+./Figure_Sup_6.R
+./Figure_Sup_7.R
+./Figure_Sup_8.R
+```
 
 
 
