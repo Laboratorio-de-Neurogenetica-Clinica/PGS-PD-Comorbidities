@@ -4,10 +4,11 @@ This tutorial allow to replicate the analysis of PGS of Epilepsy in Parkinson di
 ## Files
 0. *EPI_GWAS* (NOT INCLUDED): Summary statistics from the last meatanalysis of epilepsy .
 1. *over chain*: chain file to liftover GWAS SS.
-2. *geneset.list*: genes of interest.
-3. *repetitive.regions.bed*: list of genomic repetetitive regions (e.g. centromere, telomere).
-4. PRS_EPI_all_2022/: Folder containg all intermediate files. 
-
+2. COVARS.tsv*: Simulated Covariables to use in PRS calcualtion
+3. *genetic_sex.tsv*: Simulated genetic sex to use in PRS calcualtion
+4. *PCA.tsv*: Simulated PCA to use in PRS calcualtion
+5. *releated_ids.tsv*: Simulated related individuals to use in PRS calcualtion
+6. *CMRBs_PRS_pheno_covar.tsv.gz*: Results for each comorbidity to replicate Manuscript figures to use in PRS calcualtion
 ## Dependencies
 1. [PLINK 1.9](https://www.cog-genomics.org/plink/1.9/)
 2. [PLINK 2](https://www.cog-genomics.org/plink/2.0/)
@@ -21,16 +22,39 @@ This tutorial allow to replicate the analysis of PGS of Epilepsy in Parkinson di
 	|   ├── 2_QC_target_data     
 	│   ├── 3_Clump_PRS
 	│   ├── 4_Tresholding
+ 	│   └── Metadata
+  	|       ├── COVARS.tsv
+  	|       ├── genetic_sex.tsv
+  	|       ├── PCA.tsv
+	│       └── releated_ids.tsv
+ 	├── Figures
+	│   ├── T2D_PRS_pheno_covar.tsv.gz
+ 	│   ├── MDD_PRS_pheno_covar.tsv.gz
+	│   ├── MH_PRS_pheno_covar.tsv.gz
+	│   ├── EPI_PRS_pheno_covar.tsv.gz
+	│   ├── Height_PRS_pheno_covar.tsv.gz
+	│   └── Figure*.R 
 	├── 1_GWAS_liftover.sh
 	├── 2_GWAS_QC.sh
- 	└── 3_QC_UKBB.r
-
+ 	├── 3_QC_UKBB.r
+	├── 4_PCA_only_ukb.r
+	├── 5_REL_IDS.r
+	└── 6_CMRB_Best_PRS.R
+## Step 0: Obtain Datasets
+To generate the RPS we need base data (GWAS SS) and target data (genotypes). The genotypes used correspond to the data imputed from the UK biobank. Due to the availability of the dataset we will use sample data from 1000 genomes.
+### 1. Download WGS data for chr 22
+```
+PATH_TO_QC=PRS_EPI_all_2022/2_QC_target_data
+wget -P $PATH_TO_QC -c	http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/data_collections/1000G_2504_high_coverage/working/20220422_3202_phased_SNV_INDEL_SV/1kGP_high_coverage_Illumina.chr22.filtered.SNV_INDEL_SV_phased_panel.vcf.gz 
+plink2 --vcf ${PATH_TO_QC}/1kGP_high_coverage_Illumina.chr22.filtered.SNV_INDEL_SV_phased_panel.vcf.gz --export bgen-1.2 --out ${$PATH_TO_QC}/1000Genomes_chr22 
+```
 ## Step 1: Quality controls for GWAS summary statistics
 For a conplete detail of Quality controls (QC) procedures refers to [Choi *et al*, 2020](https://www.nature.com/articles/s41596-020-0353-1). Summary statistics from Epilepsy can be downloaded from [here](https://www.epigad.org/download/final_sumstats.zip), or with the code below. GWAS of epilepsy can be found in [ILAE *et al*, 2022](https://www.nature.com/articles/s41588-023-01485-w#article-info).  
 
 ### 1. Downlaoad GWAS EPI 
 ```
 GWAS_SS_PATH=PRS_EPI_all_2022/1_SS_GWAS_EPI_all_2022
+mkdir -p $GWAS_SS_PATH
 wget -P $GWAS_SS_PATH -c https://www.epigad.org/download/final_sumstats.zip
 unzip -d $GWAS_SS_PATH $GWAS_SS_PATH/final_sumstats.zip 
 
@@ -52,8 +76,8 @@ In order to run this tutorial with other comorbidities, please follow the recomm
 GWAS_SS_PATH=PRS_EPI_all_2022/1_SS_GWAS_EPI_all_2022
 {
 echo "CHR BP MarkerName Allele1 Allele2 Freq1 Beta P-value"
-cat $GWAS_SS_PATH/ILAE3_TRANS_all_epilepsy_final.tbl | sed '1d' | cut -f1,2,3,4,5,6,12,10  
-} | sed 's/\t/ /g' > $GWAS_SS_PATH/GWAS_SS_EPI_all_2022_RAW_hg19.tsv
+cat $GWAS_SS_PATH/ILAE3_TRANS_all_epilepsy_final.tbl | sed '1d' | grep '^22' | sed 's/\t/ /g' | awk -F' ' '{print $1,$2,$3,$4,$5,$6,$12,$10}'  
+}  > $GWAS_SS_PATH/GWAS_SS_EPI_all_2022_RAW_hg19.txt
 ```
 ### 3. Liftover GWAS SS to GRCh38
 Most of the GWAS are published in GRCh37 version. And the imputed data from UK Biobank is in GRCh38, so it is necessary to update the GWAS SS potions to GRCh48 version with Liftover. The following bash script can be used to generate the GWAS SS in GRCh38.
@@ -104,14 +128,14 @@ fi
 if [[ -z $CHAIN ]] ;then echo "-C not present: indicate path to hg19ToHg38.over.chain.gz "; exit 0 ; fi
 
 
-WORKD=$WORK_START
+WORKD=$(pwd)
 echo Working in $WORKD 
 
 ### generate .bed file to liftover
 cd $WORKD/1_SS_GWAS_${CMRB}
 
 printf "Formating GWAS SS to match hg19 to liftover: "
-cat GWAS_SS_${CMRB}_RAW_hg19.tsv | awk -F' ' '{if (NR>1) print "chr"$1 "\t" ($2-1) "\t" $2 "\t" $3","$4","$5","$6","$7","$8 }' | sed 's/chr23/chrX/g'  > GWAS_SS_hg19.bed
+cat GWAS_SS_${CMRB}_RAW_hg19.txt | awk -F' ' '{if (NR>1) print "chr"$1 "\t" ($2-1) "\t" $2 "\t" $3","$4","$5","$6","$7","$8 }' | sed 's/chr23/chrX/g'  > GWAS_SS_hg19.bed
 printf "DONE\n"
 
 printf "Liftover to hg38: "
@@ -119,11 +143,11 @@ liftOver GWAS_SS_hg19.bed $CHAIN GWAS_SS_hg38.bed GWAS_SS_unlifted.bed
 printf "DONE\n"
 
 printf "Formating hg38 to GWAS SS pipeline PRS: "
-cat GWAS_SS_hg38.bed | sed 's/,/\t/g' | sed 's/\t/ /g' | awk -F' ' '{printf $1; for (i=3; i <= NF; i++) printf FS$i; print NL }' | sed 's/^chr//g' > GWAS_SS_${CMRB}_RAW_hg38.tsv 
+cat GWAS_SS_hg38.bed | sed 's/,/\t/g' | sed 's/\t/ /g' | awk -F' ' '{printf $1; for (i=3; i <= NF; i++) printf FS$i; print NL }' | sed 's/^chr//g' > GWAS_SS_${CMRB}_RAW_hg38.txt 
 printf "DONE\n"
 ```
 ```
-./1_GWAS__liftover.sh -c EPI_all_2022 -X true -C hg19ToHg38.over.chain.gz
+./1_GWAS_liftover.sh -c EPI_all_2022 -X true -C hg19ToHg38.over.chain.gz
 ```
 ### 4. Perform QC steps in GWAS SS 
 The GWAS SS quality controls consist of eliminating duplicate and ambiguous SNPs. The following bash script allows to generate the final GWAS SS.
@@ -192,57 +216,59 @@ cd $WORKD/1_SS_GWAS_$CMRB
 # 7 Beta
 # 8 P-value
 
-if [[ ! -f final_${CMRB}_QC.tsv ]] ; then    
-    cat GWAS_SS_${CMRB}_RAW_hg38.tsv |  sort  -nk1,1 -k2,2 > ${CMRB}_sorted.tsv
-    # filter
-    cat ${CMRB}_sorted.tsv | awk '{if ($6 >= 0.01) {print $0}}' > ${CMRB}_filtered.tsv
+cat GWAS_SS_${CMRB}_RAW_hg38.txt |  sort  -nk1,1 -k2,2 > ${CMRB}_sorted.txt
+# filter
+cat ${CMRB}_sorted.txt | awk '{if ($6 >= 0.01) {print $0}}' > ${CMRB}_filtered.txt
 
-    #Alleles to upercase
-    cat ${CMRB}_filtered.tsv | awk '{print $1,$2,$3,toupper($4) ,toupper($5) ,$6 ,$7 ,$8 }' > ${CMRB}_filtered_touper.tsv
+#Alleles to upercase
+cat ${CMRB}_filtered.txt | awk '{print $1,$2,$3,toupper($4) ,toupper($5) ,$6 ,$7 ,$8 }' > ${CMRB}_filtered_touper.txt
 
-    #recode SNPS
-    cat ${CMRB}_filtered_touper.tsv | awk -F' ' '{print " " $1":"$2":"$4":"$5 FS $3 FS $1 FS $2 FS $4 FS $5 FS $6 FS $7 FS $8}' > ${CMRB}_recode.tsv
-    ## remove duplciated
-    cat ${CMRB}_recode.tsv | awk '{seen[$1$2]++; if(seen[$1$2]==1){ print}}' > ${CMRB}_nodup.tsv
+#recode SNPS
+cat ${CMRB}_filtered_touper.txt | awk -F' ' '{print " " $1":"$2":"$4":"$5 FS $3 FS $1 FS $2 FS $4 FS $5 FS $6 FS $7 FS $8}' > ${CMRB}_recode.txt
+## remove duplciated
+cat ${CMRB}_recode.txt | awk '{seen[$1$2]++; if(seen[$1$2]==1){ print}}' > ${CMRB}_nodup.txt
 
-    # Remove ambiguous SNPs
-    awk '!( ($5=="A" && $6=="T") || \
-        ($5=="T" && $6=="A") || \
-        ($5=="G" && $6=="C") || \
-        ($5=="C" && $6=="G")) {print}' ${CMRB}_nodup.tsv > ${CMRB}_no_ambiguos.tsv
+# Remove ambiguous SNPs
+awk '!( ($5=="A" && $6=="T") || \
+    ($5=="T" && $6=="A") || \
+    ($5=="G" && $6=="C") || \
+    ($5=="C" && $6=="G")) {print}' ${CMRB}_nodup.txt > ${CMRB}_no_ambiguos.txt
 
-    cat ${CMRB}_no_ambiguos.tsv | sed 's/ 23:/X:/g' | sed 's/ 23 / X /g' > final_${CMRB}_QC.tsv 
-else 
-    echo QC of Base data already performed, skipping
-fi
+{
+echo " ID MarkerName CHR BP Allele1 Allele2 Freq1 Beta P-value"
+cat ${CMRB}_no_ambiguos.txt | sed 's/ 23:/X:/g' | sed 's/ 23 / X /g' 
+} > final_${CMRB}_QC.txt 
+
 ```
 ```
 ./2_GWAS_QC.sh -c EPI_all_2022 -X true
 ```
 
 ## Step 2: Perform QC in UKBB data 
-The reference and alternative alleles of the UK biobank must match those reported in the GWAS SS, so we must generate a quality control of the UK biobank in order to work with the SNPs in a unified way.
+The reference and alternative alleles of the genotype must match those reported in the GWAS SS, so we must generate a quality control of the UK biobank in order to work with the SNPs in a unified way.
 ### 1. Filter BGEN files of UKB by allele frequency
 Due to the magnitude of the imputed UKBB data we first filtered by allelic frequency greater than 1% and then performed the corresponding quality controls on smaller files.
-The next step was performed in the UK Biobank Research Analysis Platform (RAP), due to the availability of the data, we cannot provide the BGEN file but it can be replicated with the following command in RAP, using Swiss army knife tool or in an instance of JupyterLab, the requested virtual machine was mem2_ssd2_v2_x32
+The next step was performed in the UK Biobank Research Analysis Platform (RAP), due to the availability of the data, we provide example data from 1000 genomes
 ```
-for chr in {1..22} X ; do 
-	cat ukb21007_c${chr}_b0_v1.sample | sed 's/0 0 0 0/0 0 0 D/g'> sample_chr${chr}.sample
-	plink2  --bgen ukb21007_c${chr}_b0_v1.bgen ref-first \
-			--sample sample_chr${chr}.sample \
-			--oxford-single-chr ${chr}  \
-			--set-all-var-ids @:#:\$r:\$a --new-id-max-allele-len 100 missing \
-			--maf 0.01 \
-			--make-pfile --out ukb_impTopMed_chr${chr}
-	grep -v '#' ukb_impTopMed_chr${chr}.pvar > ukb_impTopMed_chr${chr}_noHeader.pvar
-done
+PATH_TO_QC=PRS_EPI_all_2022/2_QC_target_data
+BGEN_PREFIX=${PATH_TO_QC}/1000Genomes_chr22
+
+mkdir -p $PATH_TO_QC
+cat ${BGEN_PREFIX}.sample | sed 's/0 0 0 0/0 0 0 D/g'> ${PATH_TO_QC}/sample_chr22.sample
+plink2  --bgen ${BGEN_PREFIX}.bgen ref-first \
+		--sample ${PATH_TO_QC}/sample_chr22.sample \
+		--oxford-single-chr 22  \
+		--set-all-var-ids @:#:\$r:\$a --new-id-max-allele-len 100 missing \
+		--maf 0.01 \
+		--make-pfile --out ${PATH_TO_QC}/1000Genomes_common_chr22
+grep -v '#' ${PATH_TO_QC}/1000Genomes_common_chr22.pvar > ${PATH_TO_QC}/1000Genomes_common_chr22_noHeader.pvar
 ```
 ### 2. QC UK biobank 
 Once the BGEN files have been filtered, it is necessary to identify the common SNPs between the UK bibank and the GWAS SS. To do this, using the .pvar file (provided in this tutorial) and the GWAS QC file generated in step 1, we identify the common SNPs and generate a list to update the .pvar file with the alleles reported in the GWAS SS. The following R script is the one in charge of what is described above
 ```
 #!/usr/bin/env Rscript
 ####USAGE######
-# ./3_QC_UKB.r [Comorbidity]
+# ./3_QC_UKB.r [Comorbidity] {final GWAS SS} {.pvar file no header}
 #
 #
 #
@@ -266,17 +292,19 @@ complement <- function(x) {
     )
 }
 CMRB=args[1]
+GWAS_SS=args[2]
+PVAR_FILE=args[3]
 # Read in summary statistic data (require data.table v1.12.0+)
 print("Reading SS file")
-height <- fread(paste("final_",CMRB,"_QC.tsv",sep="")) %>%
+SS <- fread(GWAS_SS,colClasses=c(CHR="character")) %>%
     setnames(., colnames(.), c("ID", "Marker", "CHR", "BP", "A1", "A2","Freq1","Beta","P-value")) %>%
     # And immediately change the alleles to upper cases
     .[,c("A1","A2"):=list(toupper(A1), toupper(A2))] 
-str(height)
-for (chr in c(1:22,"X")) {
+#str(height)
+for (chr in 22) {
   # Read in bim file  A1=minor A2=major
     print(paste("Reading BIM file of chromosome",chr,sep=" "))
-    bim <- fread(paste("ukb_impTopMed_chr",chr,"_noHeader.pvar",sep=""),colClasses=c(V1="character")) %>%
+    bim <- fread(PVAR_FILE,colClasses=c(V1="character")) %>%
         # Note: . represents the output from previous step
         # The syntax here means, setnames of the data read from
         # the bim file, and replace the original column names by 
@@ -329,7 +357,7 @@ for (chr in c(1:22,"X")) {
     
     # Output updated bim file
     print(paste("Writing pvar File updated of chromosome",chr,sep=" "))
-    fwrite(bim[,c("ID", "B.A1")], paste(CMRB,"_chr",chr,"_pvar_updated",sep=""),quote = F,row.names = F , col.names=F, sep="\t")
+    fwrite(bim[,c("ID", "B.A1")], paste("PRS_",CMRB,"/2_QC_target_data/",CMRB,"_chr",chr,"_pvar_updated",sep=""),quote = F,row.names = F , col.names=F, sep="\t")
     
     # Output mismatch file
     print(paste("Writing QCded SNPs of chromosome",chr,sep=" "))
@@ -338,81 +366,192 @@ for (chr in c(1:22,"X")) {
                   bim$ID %in% info.complement$ID_bim | 
                   bim$ID %in% info.recode$ID_bim |
                   bim$ID %in% info.crecode$ID_bim)]
-    write.table(mismatch, paste(CMRB,"_chr",chr,"_snplist_pvar.mismatch",sep=""), quote=F, row.names=F, col.names=F)
+    write.table(mismatch, paste("PRS_",CMRB,"/2_QC_target_data/",CMRB,"_chr",chr,"_snplist_pvar.mismatch",sep=""), quote=F, row.names=F, col.names=F)
     
 }
 ```
 ```
-./3_QC_UKBB.r EPI_all_2022
+PATH_TO_QC=PRS_EPI_all_2022/2_QC_target_data
+GWAS=PRS_EPI_all_2022/1_SS_GWAS_EPI_all_2022/final_EPI_all_2022_QC.txt
+PVAR=${PATH_TO_QC}/1000Genomes_common_chr22_noHeader.pvar
+./3_QC_UKBB.r EPI_all_2022 ${GWAS} ${PVAR}
 ```
 
 ### 3. Extract common positions between UKBB and Epilepsy GWAS 
-With the files generated in the previous step, we proceed to filter the UKbiobank imputed data and update the reported alleles. Due to the availability of the data, we cannot provide the filtered imputed data, but it can be replicated with the following command in RAP, using Swiss army knife tool or in an instance of JupyterLab, the requested virtual machine was mem2_ssd2_v2_x32
+With the files generated in the previous step, we proceed to filter the UKbiobank imputed data and update the reported alleles. 
 ```
-for chr in {1..22} X ; do
-	CMRB=EPI_all_2022
-	plink2  --pfile ukb_impTopMed_chr${chr} --exclude ${CMRB}_chr${chr}_snplist_pvar.mismatch --ref-allele force ${CMRB}_chr${chr}_pvar_updated --make-pfile --out ukb_imp_chr${chr}_swapped --memory 120000
-	plink2  --pfile ukb_imp_chr${chr}_swapped --set-all-var-ids @:#:\$r:\$a --new-id-max-allele-len 100 missing --make-bed --out ukb_imp_chr${chr}_recoded --memory 120000
-	rm ukb_impTopMed_chr${chr}.*
-done
+CMRB=EPI_all_2022
+PATH_TO_QC=PRS_EPI_all_2022/2_QC_target_data
+PFILE_PREFIX=${PATH_TO_QC}/1000Genomes_common_chr22
+
+plink2  --pfile ${PFILE_PREFIX} --exclude ${PATH_TO_QC}/${CMRB}_chr22_snplist_pvar.mismatch --ref-allele force ${PATH_TO_QC}/${CMRB}_chr22_pvar_updated --make-pfile --out ${PFILE_PREFIX}_swapped
+plink2  --pfile ${PFILE_PREFIX}_swapped --set-all-var-ids @:#:\$r:\$a --new-id-max-allele-len 100 missing --make-bed --out ${PFILE_PREFIX}_recoded
 ```
 ## Step 3: PRS Calcualtions Clumping
 With the common SNPs we proceed to clumping, which consists of selecting independent variants in the haplotype blocks, considering the GWAS SS pvalue. We will use the clumped data to calculate the PRS using different pvalue thresholds.  
 ### 1. Clumping
-The following code needs to be done in RAP, which consists of taking the QC imputed data and performing the clumping and generating a new pfiles file.
+Consists of taking the independent alleles taking into consideration the GWAS Pvalue.
 ```
-for chr in 1 2 21 22 ; do
-	plink   --bfile ukb_imp_chr${chr}_recoded --clump-p1 1 --clump-r2 0.1 --clump-kb 500 --clump final_SS_QC.tsv --clump-snp-field MarkerName --clump-field Pvalue --out clumped_SS_chr$chr --memory 60000
-	awk 'NR!=1{print $3}' clumped_SS_chr$chr.clumped | sed '/^$/d' >  SS_TEMP_chr${chr}.valid.snp
-	plink2  --bfile ukb_imp_chr${chr}_recoded --extract SS_TEMP_chr${chr}.valid.snp --make-pfile --out clumped_SS_chr$chr --memory 60000
-done 
+GWAS=PRS_EPI_all_2022/1_SS_GWAS_EPI_all_2022/final_EPI_all_2022_QC.txt
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS
+BFILE_PREFIX=${PATH_TO_QC}/1000Genomes_common_chr22_recoded
+
+mkdir -p $PATH_TO_CLUMP
+plink   --bfile ${BFILE_PREFIX} --clump-p1 1 --clump-r2 0.1 --clump-kb 500 --clump ${GWAS} --clump-snp-field ID --clump-field P-value --out ${PATH_TO_CLUMP}/clumped_SS_chr22
+awk 'NR!=1{print $3}' ${PATH_TO_CLUMP}/clumped_SS_chr22.clumped | sed '/^$/d' >  ${PATH_TO_CLUMP}/SS_chr22.valid.snp
+plink2  --bfile ${BFILE_PREFIX} --extract ${PATH_TO_CLUMP}/SS_chr22.valid.snp --make-bed --out ${PATH_TO_CLUMP}/clumped_SS_chr22
 ```
 #### 2. Merge clumped data by chromosome in a unique file
-The following code needs to be done in RAP, which allows to merge the data by chromosomes, to generate a single file on which to calculate the PRS.
+When we work with all the data we must unify the chromosomes in a single file using the dociog below, for this case we will only use chromosome 22, omit this execution.
 ```
-ls | grep ".pvar" | grep "clumped" > TEMP1.txt ; awk -F'.' '{print $1 }' TEMP1.txt > merge_list.chrALL.txt
-rm TEMP1.txt
-plink2 --pmerge-list merge_list.chrALL.txt --make-bed --out clumped_SS_chr.all
-for chr in {1..22} X; do
-	mv SS_TEMP_chr${chr}.valid.snp SS_chr${chr}.valid.snp
-done   
+#ls | grep ".pvar" | grep "clumped" > TEMP1.txt
+#awk -F'.' '{print $1 }' TEMP1.txt > merge_list.chrALL.txt
+#rm TEMP1.txt
+#plink2 --pmerge-list merge_list.chrALL.txt --make-bed --out clumped_SS_chr.all 
 ```
 ### 3. Define SNPs and their Pvalue 
-The following code needs to be done in RAP, it takes the GWAS SS and extracts the SNPs ID along with their pvalue, to be used to define the snps that meet the pvalue treshold. additionally it generates the list of the pvalues included in each treshold AND filters the GWAS SS with the valid SNPs obtained in step 2.
+It takes the GWAS SS and extracts the SNPs ID along with their pvalue, to be used to define the snps that meet the pvalue treshold. additionally it generates the list of the pvalues included in each treshold AND filters the GWAS SS with the valid SNPs obtained in step 2.
 ```
-#Generate SNP.pvalue
-echo -n "" > SNP.pvalue
-for chr in {1..22} X ; do
-	cat final_SS_QC.tsv | awk -F' ' '{print $1,$9}' | grep -wFf SS_chr${chr}.valid.snp  >> SNP.pvalue
-done
+GWAS=PRS_EPI_all_2022/1_SS_GWAS_EPI_all_2022/final_EPI_all_2022_QC.txt
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS
 
-#Generate list of treshold used
-echo "0.00001 0 0.00001" >> range_list
-echo "0.0001 0 0.0001" >> range_list
-echo "0.001 0 0.001" >> range_list
-echo "0.01 0 0.01" >> range_list
-echo "0.05 0 0.05" >> range_list
-echo "0.1 0 0.1" >> range_list
-echo "0.2 0 0.2" >> range_list
-echo "0.3 0 0.3" >> range_list
-echo "0.4 0 0.4" >> range_list
-echo "0.5 0 0.5" >> range_list
-echo "0.8 0 0.8" >> range_list
-echo "1 0 1" >> range_list 
+#Generates SNP and Pvalue in one file
+cat $GWAS | awk -F' ' '{print $1,$9}' | grep -wFf ${PATH_TO_CLUMP}/SS_chr22.valid.snp  > ${PATH_TO_CLUMP}/SNP.pvalue
 
-#Filter GWAS SS to use only valid SNPs	
-echo -n "" > clumped_final_SS_common_SNPS_all.txt
-for chr in {1..22} ; do
-	grep -wFf SS_chr${chr}.valid.snp final_SS_QC.tsv >> clumped_final_SS_common_SNPS_all.txt
-done 
+#define threshold to use in Thresholding step
+echo "0.00001 0 0.00001" > ${PATH_TO_CLUMP}/range_list
+echo "0.0001 0 0.0001" >> ${PATH_TO_CLUMP}/range_list
+echo "0.001 0 0.001" >> ${PATH_TO_CLUMP}/range_list
+echo "0.01 0 0.01" >> ${PATH_TO_CLUMP}/range_list
+echo "0.05 0 0.05" >> ${PATH_TO_CLUMP}/range_list
+echo "0.1 0 0.1" >> ${PATH_TO_CLUMP}/range_list
+echo "0.2 0 0.2" >> ${PATH_TO_CLUMP}/range_list
+echo "0.3 0 0.3" >> ${PATH_TO_CLUMP}/range_list
+echo "0.4 0 0.4" >> ${PATH_TO_CLUMP}/range_list
+echo "0.5 0 0.5" >> ${PATH_TO_CLUMP}/range_list
+echo "0.8 0 0.8" >> ${PATH_TO_CLUMP}/range_list
+echo "1 0 1" >> ${PATH_TO_CLUMP}/range_list 
+
+#Filter GWAS SS with valid SNPs
+grep -wFf ${PATH_TO_CLUMP}/SS_chr22.valid.snp $GWAS > ${PATH_TO_CLUMP}/clumped_final_SS_common_SNPS_all.txt
+
 ```
 ### 5. Calculate PRS for all Pvalue trehshold
-The following code needs to be done in RAP, it takes the files generated above to calculate the PRS for each of the pvalue treshold defined above
+Takes the files generated above to calculate the PRS for each of the pvalue treshold defined above
 ```
-plink --bfile clumped_SS_chr.all --score clumped_final_SS_common_SNPS_all.txt 1 5 8 header --q-score-range range_list SNP.pvalue --out SS_PLINK1.9_PRS --memory 60000
+GWAS=PRS_EPI_all_2022/1_SS_GWAS_EPI_all_2022/final_EPI_all_2022_QC.txt
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS
+CLUMPED_PREFIX=${PATH_TO_CLUMP}/clumped_SS_chr22
+
+plink --bfile ${CLUMPED_PREFIX} --score ${PATH_TO_CLUMP}/clumped_final_SS_common_SNPS_all.txt 1 5 8 header --q-score-range ${PATH_TO_CLUMP}/range_list ${PATH_TO_CLUMP}/SNP.pvalue --out ${PATH_TO_CLUMP}/SS_PLINK1.9_PRS
 ```
 ## Step 4: PRS threshholding
-
+Thresholding consists of taking the PRS calculated for the different tresholds and selecting the one that best explains the variability of the data.
 ### 1. Sample QC
 The quality controls of the individuals were performed by extracting the available information from the cohort browser of dnanexus, for this example we will make use of synthesized clinical data to perform the tresholding and sample QC steps.
+```
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS/
+PATH_TO_THRESH=PRS_EPI_all_2022/4_Thresholding
+METADATA=PRS_EPI_all_2022/Metadata/
+mkdir -p $PATH_TO_THRESH
+mkdir -p $PATH_TO_THRESH/Sample_QC
+PATH_TO_SAMPLEQC=$PATH_TO_THRESH/Sample_QC
+```
+#### a. Ancestry QC
+```
+cat $PATH_TO_CLUMP/clumped_SS_chr22.psam | grep -v '#'| awk -F' ' '{print $1}' | sort  > ${PATH_TO_SAMPLEQC}/Phenotipo.Ids     
+mkdir -p ${PATH_TO_SAMPLEQC}/PCA_results     
+./4_PCA_only_ukb.r EPI_all_2022 ${METADATA}/PCA.tsv
+grep -wf ${PATH_TO_SAMPLEQC}/keep_ancestry_eur.txt ${PATH_TO_SAMPLEQC}/Phenotipo.Ids > ${PATH_TO_SAMPLEQC}/Phenotipo_QC_EUR.Ids 
+```
+#### b. Discordant Genetic sex QC
+```
+cut -f2 ${METADATA}/COVARS.tsv | paste -d'\t' - ${METADATA}/genetic_sex.tsv > ${PATH_TO_SAMPLEQC}/TEMP  
+cat ${PATH_TO_SAMPLEQC}/TEMP | awk -F'\t' '{if ($1 != $3) print  }' | cut -f2 | grep -v "ID" > ${PATH_TO_SAMPLEQC}/remove_sex_discordant.ids 
+```
+#### c. Releted individual QC
+```
+cat  ${METADATA}/releated_ids.tsv | awk -F'\t' '{if ($5 > 0.0442 ) print $1 FS $2}' | grep -v "ID"   >   ${PATH_TO_SAMPLEQC}/rel_IDs_all_filter.txt
+cut -f1 ${PATH_TO_SAMPLEQC}/rel_IDs_all_filter.txt > ${PATH_TO_SAMPLEQC}/rel_ID1.txt 
+cut -f2 ${PATH_TO_SAMPLEQC}/rel_IDs_all_filter.txt > ${PATH_TO_SAMPLEQC}/rel_ID2.txt 
+./5_REL_IDS.r ${PATH_TO_SAMPLEQC}/rel_ID1.txt ${PATH_TO_SAMPLEQC}/rel_ID2.txt ${METADATA}/COVARS.tsv 
+cat ${PATH_TO_SAMPLEQC}/REL_IDS_to_remove.txt | sort | uniq | grep -v "remove" > ${PATH_TO_SAMPLEQC}/TEMP 
+sed -e "s/\r//" ${PATH_TO_SAMPLEQC}/TEMP  > ${PATH_TO_SAMPLEQC}/remove_REL.ids 
+```
+#### d. Generate final QCded Ids
+```
+cat ${PATH_TO_SAMPLEQC}/Phenotipo_QC_EUR.Ids | grep -vwFf ${PATH_TO_SAMPLEQC}/remove_REL.ids  | grep -vwFf ${PATH_TO_SAMPLEQC}/remove_sex_discordant.ids   > ${PATH_TO_THRESH}/Phenotipo_QC_EUR_final.Ids 
+```
+### 2. Correct .PSAM file and generate .FAM to work in PLINK1.9
+```
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS/
+PATH_TO_THRESH=PRS_EPI_all_2022/4_Thresholding/
+METADATA=PRS_EPI_all_2022/Metadata/
+
+awk -F'\t' '{print $1}' ${PATH_TO_THRESH}/Phenotipo_QC_EUR_final.Ids > ${PATH_TO_THRESH}/keep_Ids 
+cat ${METADATA}/COVARS.tsv | cut -f1,10 |  awk -F'\t' 'BEGIN {print "#IID\tPHENO1"} {if(NR > 1 ) print $1 FS $2 + 1}' > ${PATH_TO_THRESH}/case_controls.txt 
+cat ${METADATA}/COVARS.tsv | cut -f1,2 | awk -F'\t' 'BEGIN {print "#IID\tSEX"} {if(NR > 1 ) print $1 FS $2 +1 }' > ${PATH_TO_THRESH}/update_sex.txt 
+
+plink2 --psam ${PATH_TO_CLUMP}/clumped_SS_chr22.psam \
+	--pheno ${PATH_TO_THRESH}/case_controls.txt  \
+	--keep ${PATH_TO_THRESH}/keep_Ids \
+	--update-sex ${PATH_TO_THRESH}/update_sex.txt \
+	--make-just-psam --out ${PATH_TO_THRESH}/final.Phenotipo_QC
+
+cat ${PATH_TO_THRESH}/final.Phenotipo_QC.psam | awk -F'\t' '{if (NR != 1) print $1 "\t" $1 "\t0\t0\t" $2 "\t" $3  }'  > ${PATH_TO_THRESH}/final.Phenotipo_QC.fam    
+```
+### 3. Generate a list of pvalue threshold obtaind (Sometimes not all Pvalues are presetn in GWAS SS)
+```
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS/
+PATH_TO_THRESH=PRS_EPI_all_2022/4_Thresholding/
+SUFFIX_PRS=SS_PLINK1.9_PRS.
+
+ls ${PATH_TO_CLUMP}${SUFFIX_PRS}* | grep 'profile' | sed -e 's/PRS_EPI_all_2022\/3_Clump_PRS\/SS_PLINK1.9_PRS.//g' | sed 's/.profile//g' > ${PATH_TO_THRESH}/used_tresh.txt 
+```
+### 4. Identify which Pvalue Threshold best describe the data
+```
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS/
+PATH_TO_THRESH=PRS_EPI_all_2022/4_Thresholding/
+METADATA=PRS_EPI_all_2022/Metadata/
+
+./6_CMRB_Best_PRS.R ${PATH_TO_THRESH}/used_tresh.txt ${PATH_TO_THRESH}/final.Phenotipo_QC.fam ${METADATA}/COVARS.tsv
+```
+### 4. Save PRS at Pvalue Threshold obtained (Indicate the pvalue obtained in the last step, in this case 0.01)
+```
+PATH_TO_CLUMP=PRS_EPI_all_2022/3_Clump_PRS/
+PATH_TO_THRESH=PRS_EPI_all_2022/4_Thresholding/
+METADATA=PRS_EPI_all_2022/Metadata/
+
+./6_CMRB_Best_PRS.R ${PATH_TO_THRESH}/used_tresh.txt ${PATH_TO_THRESH}/final.Phenotipo_QC.fam ${METADATA}/COVARS.tsv 0.01
+```
+## Step 5. Replicate Figures
+
+### 4. Save PRS at Pvalue Threshold obtained (Indicate the pvalue obtained in the last step, in this case 0.01)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
